@@ -9,22 +9,94 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+**Ejercicio 1.** 
+#Exploremos otro diagrama de barras con una colección diferente - inspections. Esta recopilación contiene datos sobre las inspecciones de edificios de la ciudad de Nueva York y si pasan o no. Recupere dicha colección en R.
+```{r}
+library(mongolite)
+library(dplyr)
+library(tidyverse)
+library(lubridate)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r cadena_conexion}
+cadena_conexion = 'mongodb+srv://user01:user01@cluster0.mcblc3z.mongodb.net/test'
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r opciones_conexion}
+opciones_conexion = ssl_options(weak_cert_validation = T)
+```
+
+```{r consulta_inspeccion}
+inspecciones= mongo(collection="inspections", db="sample_training", url=cadena_conexion, options = opciones_conexion)
+```
+
+```{r verificacion consulta inspeccion}
+inspecciones$count()
+```
+
+```{r visualizar una inspeccion}
+inspecciones$iterate()$one()
+```
+
+**Ejercicio 2.**
+#Suponga que desea verificar el número de empresas que no aprobaron las inspecciones en 2015 en comparación con 2016.
+```{r}
+Inspec_Fail20152016 <- inspecciones$aggregate('[{ "$addFields": 
+{"AñoConvertido": {
+  "$year": {
+    "$dateFromString": {
+      "dateString": "$date"}}}}},
+  {"$match": {"result": "Fail" }},
+  {"$group": {"_id": "$AñoConvertido",  
+      "count": { "$sum": 1 }  
+    }
+  }
+]')
+```
+
+
+**Ejercicio 3.**
+#Teniendo en cuenta que el resultado de la tarea anterior está agrupando los resultados por año, cree un gráfico de barras.
+```{r}
+library(ggplot2)
+dfInspec_Fail20152016 <- as.data.frame(Inspec_Fail20152016)
+ggplot(dfInspec_Fail20152016, aes(x = '_id', y = 'count')) + 
+  geom_bar(stat = "identity") + 
+  labs(title = "Inspecciones no superadas por año", x = "Año", y = "Inspecciones no superadas") + theme_minimal()
+
+```
+
+**Ejercicio 4.**
+#A continuación, se utilizará la colección 'companies', que contiene información sobre empresas, como su año de fundación y la dirección de su sede.
+
+Supongamos que desea conocer la tendencia del número de empresas de publicidad (category_code = 'advertising') fundadas a partir de 2000 en adelante. Para ello, utilice el operador relacional [$gt](https://docs.mongodb.com/manual/reference/operator/query/gt/), agrupe los resultados por año de creación ('founded_year') y ordénelos para que se muestren posterioremente en un gráfico de líneas por año. 
+
+```{r consulta_compania }
+companias= mongo(collection="companies", db="sample_training", url=cadena_conexion, options = opciones_conexion)
+```
+
+```{r verificación consulta compania}
+companias$count()
+```
+
+```{r}
+query2 = companias$find('{"category_code":"advertising", "founded_year":{"$gt":2000}}')
+```
+
+
+```{r}
+df_resultados <- as.data.frame(query2)
+resultados_agrupados <- df_resultados %>% group_by(founded_year)
+conteo_ano <- resultados_agrupados %>% summarise(count =n())
+print(conteo_ano)
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(conteo_ano, aes(x = founded_year, y = count)) +
+  geom_line(color='darkred') + 
+  labs(title = "Empresas de publicidad creadas a partir del año 2000",
+       x = "Año de fundación",
+       y = "Número de empresas")
+```
